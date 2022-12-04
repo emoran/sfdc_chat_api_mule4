@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="bee3fc96-98f2-4be7-88b4-41d00213214b" basePath="/chat/rest" >
+		<http:request-connection protocol="HTTPS" host="d.la1-c1-ia7.salesforceliveagent.com" port="443" />
+	</http:request-config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="18e76dd7-d7a6-4138-b68c-1c261b7a6e8d" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="liveagentFlow" doc:id="674e74d1-6997-4d7b-98ef-b2ae88c073ac" >
+		<scheduler doc:name="Scheduler" doc:id="96546ed6-63c6-4af4-b170-ec352af2c44b" >
+			<scheduling-strategy >
+				<fixed-frequency startDelay="100" timeUnit="DAYS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<http:request method="GET" doc:name="GET /System/SessionId" doc:id="5ab07023-0f3b-47e0-bf6a-d7504c2c8702" config-ref="HTTP_Request_configuration" path="/System/SessionId">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"X-LIVEAGENT-API-VERSION" : "34",
+	"X-LIVEAGENT-AFFINITY": "null"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="/Chasitor/ChasitorInit Request" doc:id="68b58971-8280-4077-8913-979dbc21d25a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"organizationId": "00DDn000002F5zp",//Get this from the script when chat was setup or Company Information, 
+	"deploymentId": "572Dn000000TurK", //Get this from the script when chat was setup
+	"buttonId": "573Dn000000Turz", //Get this from the script when chat was setup
+	"sessionId": payload.id, 
+	"userAgent": "Lynx/2.8.8", 
+	"language": "en-US", 
+	"screenResolution": "1900x1080", 
+	"visitorName": "FROM MULESOFT", 
+	"prechatDetails": [],  "prechatEntities": [], 
+	"receiveQueueUpdates": true, 
+	"isPost": true 
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="session" ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<http:request method="POST" doc:name="POST /Chasitor/ChasitorInit" doc:id="c3cfe053-1362-4aec-8d7a-a638dca7f465" config-ref="HTTP_Request_configuration" path="/Chasitor/ChasitorInit">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"X-LIVEAGENT-API-VERSION" : "34",
+	"X-LIVEAGENT-AFFINITY" : vars.session.affinityToken,
+	"X-LIVEAGENT-SESSION-KEY" : vars.session.key,
+	"X-LIVEAGENT-SEQUENCE": 1
+}]]]></http:headers>
+			<http:response-validator >
+				<http:success-status-code-validator values="200..600" />
+			</http:response-validator>
+		</http:request>
+		<logger level="INFO" doc:name="Logger" doc:id="6aefbef2-0aa7-4315-b8fb-3aa84d974e08" message="#[payload]"/>
+		<ee:transform doc:name="Creating an array of 5 elements" doc:id="bacf2078-8bb0-4767-9128-4294fae70185" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+0 to 5]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<foreach doc:name="Loop Over each element" doc:id="5eb53e36-f525-4fc1-9cc8-c128a1c5ea9a" >
+			<http:request method="GET" doc:name="GET: /System/Messages" doc:id="21a60e70-e706-4a09-a72a-46812ff3db73" config-ref="HTTP_Request_configuration" path="/System/Messages">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"X-LIVEAGENT-AFFINITY" : vars.session.affinityToken,
+	"X-LIVEAGENT-SESSION-KEY" : vars.session.key,
+	"X-LIVEAGENT-API-VERSION" : "34"
+}]]]></http:headers>
+			<http:response-validator>
+				<http:success-status-code-validator values="200..600" />
+			</http:response-validator>
+		</http:request>
+			<logger level="INFO" doc:name="Logger" doc:id="a2a8bcc6-6bb6-46b4-bdf7-4f65e192f464" message="#[payload]"/>
+			<ee:transform doc:name="/Chasitor/ChatMessage Request body" doc:id="685fd136-c4f5-43d7-9115-5c6eae2abeaf">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{"text" : "Message " ++ vars.counter}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+			</ee:variables>
+		</ee:transform>
+			<http:request method="POST" doc:name="POST /Chasitor/ChatMessage" doc:id="751500f7-74de-4eb6-b38c-858a744ffd53" config-ref="HTTP_Request_configuration" path="/Chasitor/ChatMessage">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"X-LIVEAGENT-AFFINITY" : vars.session.affinityToken,
+	"X-LIVEAGENT-SESSION-KEY" : vars.session.key,
+	"X-LIVEAGENT-API-VERSION" : "34"
+}]]]></http:headers>
+		</http:request>
+			<logger level="INFO" doc:name="Logger" doc:id="3b94bcb1-5827-48bd-8878-b4d6d010af62" message="#[payload]"/>
+		</foreach>
+	</flow>
+</mule>
